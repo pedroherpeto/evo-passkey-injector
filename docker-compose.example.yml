@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Exemplo: adicione o servico `evo-injector` ao docker-compose.yml do SEU
+# Evolution (o mesmo arquivo que ja tem api/postgres/redis). Ele fica na MESMA
+# rede do Postgres (evolution-net) e alcanca o banco por dentro — o Postgres
+# NUNCA precisa ser exposto.
+#
+# Depois: defina EVO_INJECTOR_SECRET (segredo forte) e cole URL+segredo no
+# painel do zpro (Configuracoes -> Evolution).
+# ─────────────────────────────────────────────────────────────────────────
+services:
+  evo-injector:
+    # Opcao A: imagem publicada (sem build no cliente)
+    image: SEU_REGISTRY/evo-passkey-injector:1
+    # Opcao B (alternativa): build local a partir desta pasta
+    # build: ./evo-passkey-injector
+    container_name: evo_passkey_injector
+    restart: always
+    environment:
+      PORT: 8080
+      INJECTOR_SECRET: ${EVO_INJECTOR_SECRET:?defina um segredo forte}
+      # Nome de servico INTERNO do Postgres do Evolution (ajuste user/senha/db conforme seu .env):
+      EVO_DATABASE_URI: postgres://postgres:typebot@postgres:5432/evolution_db
+    networks:
+      - evolution-net
+    depends_on:
+      - postgres
+    ports:
+      # zpro no MESMO host: mantenha 127.0.0.1 (so local).
+      # zpro em host SEPARADO: exponha atras de HTTPS/reverse-proxy (o segredo protege o endpoint).
+      - "127.0.0.1:8082:8080"
+
+# A rede evolution-net ja e definida pelo compose do Evolution. Se necessario:
+# networks:
+#   evolution-net:
+#     external: true
