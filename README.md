@@ -20,7 +20,8 @@ import-por-passkey no Evolution.
 ## Deploy (1 sidecar por servidor Evolution — não por usuário)
 
 1. **Suba o serviço** junto do seu Evolution: copie o bloco de `docker-compose.example.yml` para o
-   `docker-compose.yml` que já tem `api`/`postgres`/`redis`, na rede `evolution-net`.
+   `docker-compose.yml` que já tem `api`/`postgres`/`redis`, na rede `evolution-net`. Usa a imagem
+   publicada **`zdgzpro/evo-passkey-injector:latest`** (Docker Hub) — sem build no cliente.
 2. **Defina o segredo**: `EVO_INJECTOR_SECRET` (gere com `openssl rand -hex 32`).
 3. **Ajuste o DSN**: `EVO_DATABASE_URI` apontando para o Postgres interno do Evolution.
 4. **No painel do zpro**: `Configurações → Evolution` → preencha **URL do injector** e **Segredo do

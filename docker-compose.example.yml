@@ -9,8 +9,8 @@
 # ─────────────────────────────────────────────────────────────────────────
 services:
   evo-injector:
-    # Opcao A: imagem publicada (sem build no cliente)
-    image: SEU_REGISTRY/evo-passkey-injector:1
+    # Opcao A: imagem publicada no Docker Hub (sem build no cliente)
+    image: zdgzpro/evo-passkey-injector:latest
     # Opcao B (alternativa): build local a partir desta pasta
     # build: ./evo-passkey-injector
     container_name: evo_passkey_injector
