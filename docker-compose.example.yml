@@ -1,11 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Exemplo: adicione o servico `evo-injector` ao docker-compose.yml do SEU
-# Evolution (o mesmo arquivo que ja tem api/postgres/redis). Ele fica na MESMA
-# rede do Postgres (evolution-net) e alcanca o banco por dentro — o Postgres
-# NUNCA precisa ser exposto.
+# Evolution / Evolution Go (o mesmo arquivo que ja tem api/postgres/redis).
+# Ele fica na MESMA rede do(s) Postgres e alcanca o banco por dentro — o
+# Postgres NUNCA precisa ser exposto.
 #
-# Depois: defina EVO_INJECTOR_SECRET (segredo forte) e cole URL+segredo no
-# painel do zpro (Configuracoes -> Evolution).
+# Um sidecar serve os DOIS backends. Ligue o(s) que voce usa preenchendo as
+# DSNs correspondentes (pelo menos um bloco). Depois: defina INJECTOR_SECRET
+# e cole URL+segredo no painel do zpro (Configuracoes -> Evolution / Evolution Go).
 # ─────────────────────────────────────────────────────────────────────────
 services:
   evo-injector:
@@ -18,18 +19,19 @@ services:
     environment:
       PORT: 8080
       INJECTOR_SECRET: ${EVO_INJECTOR_SECRET:?defina um segredo forte}
-      # Nome de servico INTERNO do Postgres do Evolution (ajuste user/senha/db conforme seu .env):
-      EVO_DATABASE_URI: postgres://postgres:typebot@postgres:5432/evolution_db
+      # ── Evolution API (Baileys) — descomente se usar ──
+      # EVO_DATABASE_URI: postgres://postgres:typebot@postgres:5432/evolution_db
+      # ── Evolution Go (whatsmeow) — descomente se usar ──
+      # EVOGO_AUTH_DATABASE_URI: postgres://postgres:senha@evogo-pg:5432/evogo_auth
+      # EVOGO_USERS_DATABASE_URI: postgres://postgres:senha@evogo-pg:5432/evogo_users
     networks:
       - evolution-net
-    depends_on:
-      - postgres
     ports:
       # zpro no MESMO host: mantenha 127.0.0.1 (so local).
       # zpro em host SEPARADO: exponha atras de HTTPS/reverse-proxy (o segredo protege o endpoint).
       - "127.0.0.1:8082:8080"
 
-# A rede evolution-net ja e definida pelo compose do Evolution. Se necessario:
+# A rede e definida pelo compose do Evolution/Evolution Go. Se necessario:
 # networks:
 #   evolution-net:
 #     external: true
