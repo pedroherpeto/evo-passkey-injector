@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Passkey Linker — Conector</title>
+  <style>
+    :root {
+      --bg: #0e1621;
+      --card: #17212b;
+      --card2: #1d2b39;
+      --line: #24333f;
+      --txt: #e7eef5;
+      --muted: #8fa6b8;
+      --accent: #25d366;
+      --accent-d: #1da851;
+      --blue: #4aa3ff;
+      --warn: #e0a83c;
+      --err2: #e05a5a;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--txt);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 18px 60px; }
+    header h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: .2px; }
+    header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .badge {
+      font-size: 12px; padding: 4px 10px; border-radius: 999px;
+      background: var(--card2); color: var(--muted); border: 1px solid var(--line);
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.on { background: var(--accent); }
+    .dot.off { background: #55636e; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; margin-top: 18px;
+    }
+    label { display: block; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+    input[type=text], input[type=password], textarea, select {
+      width: 100%; background: var(--card2); color: var(--txt);
+      border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px;
+      font-size: 14px; font-family: inherit; outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--blue); }
+    textarea { resize: vertical; min-height: 120px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.45; }
+    .row { display: flex; gap: 10px; }
+    .row > * { min-width: 0; }
+    .grow { flex: 1; }
+    .seg { display: inline-flex; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+    .seg button {
+      background: transparent; color: var(--muted); border: 0; padding: 8px 16px;
+      border-radius: 7px; cursor: pointer; font-size: 13.5px; font-weight: 600;
+    }
+    .seg button.active { background: var(--accent); color: #06210f; }
+    button.btn {
+      background: var(--card2); color: var(--txt); border: 1px solid var(--line);
+      border-radius: 9px; padding: 10px 14px; cursor: pointer; font-size: 13.5px; font-weight: 600;
+      white-space: nowrap;
+    }
+    button.btn:hover { border-color: var(--blue); }
+    button.btn:disabled { opacity: .5; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #06210f; border-color: transparent; width: 100%; padding: 13px; font-size: 15px; margin-top: 4px; }
+    button.primary:hover { background: var(--accent-d); }
+    button.primary:disabled { background: #2a3a2f; color: #6d8378; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px; border-radius: 999px; margin-top: 8px; }
+    .chip.ok { background: rgba(37,211,102,.13); color: var(--accent); }
+    .chip.bad { background: rgba(224,90,90,.13); color: var(--err2); }
+    .chip.neutral { background: var(--card2); color: var(--muted); }
+    .field + .field { margin-top: 16px; }
+    .log { margin-top: 16px; display: none; }
+    .log.show { display: block; }
+    .step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+    .step:first-child { border-top: 0; }
+    .step .ic { flex: 0 0 20px; text-align: center; }
+    .step .tx { flex: 1; }
+    .step small { color: var(--muted); display: block; word-break: break-word; }
+    .muted { color: var(--muted); }
+    .sep { height: 1px; background: var(--line); margin: 16px 0; border: 0; }
+    a { color: var(--blue); }
+    .foot { margin-top: 22px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.7; }
+    .hidden { display: none !important; }
+    code { background: var(--card2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Passkey Linker — Conector</h1>
+      <p>Cole a sessao extraida pela extensao, escolha a instancia e conecte sem QR.</p>
+      <div class="badges" id="badges">
+        <span class="badge"><span class="dot" id="dotEvogo"></span> Evolution Go</span>
+        <span class="badge"><span class="dot" id="dotEvo"></span> Evolution API</span>
+        <span class="badge" id="badgeConnect"><span class="dot" id="dotConnect"></span> Conexao ao vivo</span>
+      </div>
+    </header>
+
+    <!-- Segredo -->
+    <div class="card">
+      <div class="field">
+        <label for="secret">Segredo do injector</label>
+        <div class="row">
+          <input class="grow" type="password" id="secret" placeholder="x-injector-secret (o mesmo do INJECTOR_SECRET)" autocomplete="off" />
+          <button class="btn" id="btnSecret">Salvar</button>
+        </div>
+        <div class="hint">Fica so nesta aba (sessionStorage). Todas as chamadas usam o cabecalho <code>x-injector-secret</code>.</div>
+      </div>
+    </div>
+
+    <!-- Conector -->
+    <div class="card" id="mainCard">
+      <div class="field">
+        <label>Canal</label>
+        <div class="seg" id="seg">
+          <button data-ch="evogo" class="active">Evolution Go</button>
+          <button data-ch="evo">Evolution API</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="session">Sessao (ja criada no backend)</label>
+        <div class="row">
+          <select class="grow" id="session"><option value="">— carregue as sessoes —</option></select>
+          <button class="btn" id="btnReload">Recarregar</button>
+        </div>
+        <div class="hint" id="sessionHint"></div>
+      </div>
+
+      <!-- Criar nova (so EvoGo, se habilitado) -->
+      <div class="field hidden" id="createBox">
+        <label for="newName">Criar nova sessao (Evolution Go)</label>
+        <div class="row">
+          <input class="grow" type="text" id="newName" placeholder="nome da instancia" autocomplete="off" />
+          <button class="btn" id="btnCreate">Criar</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="creds">Creds da extensao</label>
+        <textarea id="creds" placeholder='Cole aqui o JSON de "Copiar creds" da extensao. Ex.: {"noiseKey":{...},"signedIdentityKey":{...},"me":{...},"account":{...}}'></textarea>
+        <span class="chip neutral" id="credsChip">aguardando creds</span>
+      </div>
+
+      <!-- Webhook opcional (EvoGo) -->
+      <div class="field hidden" id="webhookBox">
+        <label for="webhook">Webhook (opcional, Evolution Go)</label>
+        <input type="text" id="webhook" placeholder="https://seu-sistema/webhook  (deixe vazio se so quer conectar)" autocomplete="off" />
+        <div class="hint">So preencha se voce vai receber eventos. Vazio = apenas conecta a sessao.</div>
+      </div>
+
+      <hr class="sep" />
+      <button class="primary" id="btnConnect" disabled>Conectar</button>
+
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="foot">
+      1 sidecar por servidor · o banco nunca e exposto · a extensao "Copiar creds" gera o JSON acima.<br/>
+      Sem conexao ao vivo configurada, as creds sao gravadas e a sessao sobe no proximo restart do backend.
+    </div>
+  </div>
+
+  <script>
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { channel: 'evogo', secret: '', health: null };
+
+    // ── segredo ──────────────────────────────────────────────────────────────
+    try { state.secret = sessionStorage.getItem('plk_secret') || ''; } catch (e) {}
+    if (state.secret) $('secret').value = state.secret;
+    $('btnSecret').addEventListener('click', function () {
+      state.secret = $('secret').value.trim();
+      try { sessionStorage.setItem('plk_secret', state.secret); } catch (e) {}
+      flash($('btnSecret'), 'Salvo');
+    });
+    $('secret').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnSecret').click(); });
+
+    function flash(btn, txt) {
+      var old = btn.textContent; btn.textContent = txt;
+      setTimeout(function () { btn.textContent = old; }, 1200);
+    }
+
+    function headers() {
+      return { 'Content-Type': 'application/json', 'x-injector-secret': state.secret };
+    }
+
+    async function api(method, path, body) {
+      var res = await fetch(path, {
+        method: method,
+        headers: headers(),
+        body: body != null ? JSON.stringify(body) : undefined
+      });
+      var data = null;
+      try { data = await res.json(); } catch (e) {}
+      return { ok: res.ok, status: res.status, data: data || {} };
+    }
+
+    // ── health ────────────────────────────────────────────────────────────────
+    async function loadHealth() {
+      try {
+        var res = await fetch('/health');
+        var h = await res.json();
+        state.health = h;
+        setDot('dotEvogo', h.evolutionGo);
+        setDot('dotEvo', h.evolutionApi);
+        var conn = h.connect || {};
+        var anyConnect = !!(conn.evolutionApi || conn.evolutionGo);
+        setDot('dotConnect', anyConnect);
+        $('badgeConnect').title = anyConnect ? 'connect ao vivo habilitado' : 'so grava creds (connect no restart)';
+        // canal default: prefere o que estiver ligado
+        if (!h.evolutionGo && h.evolutionApi) selectChannel('evo');
+        // esconde botao de canal desligado
+        document.querySelector('[data-ch=evogo]').classList.toggle('hidden', !h.evolutionGo);
+        document.querySelector('[data-ch=evo]').classList.toggle('hidden', !h.evolutionApi);
+        refreshChannelUI();
+      } catch (e) {
+        setDot('dotEvogo', false); setDot('dotEvo', false); setDot('dotConnect', false);
+      }
+    }
+    function setDot(id, on) { $(id).className = 'dot ' + (on ? 'on' : 'off'); }
+
+    // ── canal ────────────────────────────────────────────────────────────────
+    $('seg').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      selectChannel(b.getAttribute('data-ch'));
+    });
+    function selectChannel(ch) {
+      state.channel = ch;
+      Array.prototype.forEach.call($('seg').children, function (b) {
+        b.classList.toggle('active', b.getAttribute('data-ch') === ch);
+      });
+      $('session').innerHTML = '<option value="">— carregue as sessoes —</option>';
+      $('sessionHint').textContent = '';
+      refreshChannelUI();
+      validate();
+    }
+    function refreshChannelUI() {
+      var conn = (state.health && state.health.connect) || {};
+      var isEvogo = state.channel === 'evogo';
+      $('createBox').classList.toggle('hidden', !(isEvogo && conn.evolutionGoCreate));
+      $('webhookBox').classList.toggle('hidden', !isEvogo);
+    }
+
+    // ── listar sessoes ─────────────────────────────────────────────────────────
+    $('btnReload').addEventListener('click', loadSessions);
+    async function loadSessions() {
+      if (!requireSecret()) return;
+      var path = state.channel === 'evogo' ? '/evogo/instances' : '/evo/instances';
+      $('btnReload').disabled = true; $('btnReload').textContent = '...';
+      var r = await api('GET', path);
+      $('btnReload').disabled = false; $('btnReload').textContent = 'Recarregar';
+      if (!r.ok) { $('sessionHint').innerHTML = '<span style="color:var(--err2)">erro: ' + (r.data.error || r.status) + '</span>'; return; }
+      var list = r.data.instances || [];
+      var sel = $('session');
+      sel.innerHTML = '';
+      if (!list.length) {
+        sel.innerHTML = '<option value="">nenhuma sessao encontrada</option>';
+        $('sessionHint').textContent = state.channel === 'evogo'
+          ? 'Crie uma sessao acima ou no painel do Evolution Go.'
+          : 'Crie a instancia no painel/manager do Evolution; ela aparece aqui.';
+        validate(); return;
+      }
+      list.forEach(function (i) {
+        var opt = document.createElement('option');
+        if (state.channel === 'evogo') {
+          opt.value = i.id;
+          opt.textContent = i.name + (i.connected ? '  [conectada]' : '') + (i.jid ? '  · ' + i.jid.split('@')[0] : '');
+        } else {
+          opt.value = i.name;
+          opt.textContent = i.name;
+        }
+        sel.appendChild(opt);
+      });
+      $('sessionHint').textContent = list.length + ' sessao(oes).';
+      validate();
+    }
+    $('session').addEventListener('change', validate);
+
+    // ── criar sessao (EvoGo) ───────────────────────────────────────────────────
+    $('btnCreate').addEventListener('click', async function () {
+      if (!requireSecret()) return;
+      var name = $('newName').value.trim();
+      if (!name) { $('newName').focus(); return; }
+      $('btnCreate').disabled = true; $('btnCreate').textContent = '...';
+      var r = await api('POST', '/evogo/create', { name: name });
+      $('btnCreate').disabled = false; $('btnCreate').textContent = 'Criar';
+      if (!r.ok) { alert('Falha ao criar: ' + (r.data.error || r.status) + (r.data.detail ? '\n' + JSON.stringify(r.data.detail) : '')); return; }
+      $('newName').value = '';
+      await loadSessions();
+      // seleciona a recem-criada
+      var sel = $('session');
+      for (var k = 0; k < sel.options.length; k++) { if (sel.options[k].value === r.data.id) { sel.selectedIndex = k; break; } }
+      validate();
+    });
+
+    // ── validacao das creds coladas ────────────────────────────────────────────
+    $('creds').addEventListener('input', validate);
+    function parseCreds() {
+      var raw = $('creds').value.trim();
+      if (!raw) return { ok: false, empty: true };
+      var obj;
+      try { obj = JSON.parse(raw); } catch (e) { return { ok: false, error: 'JSON invalido' }; }
+      // aceita export completo { creds: {...} } ou o objeto puro
+      if (obj && obj.creds && typeof obj.creds === 'object') obj = obj.creds;
+      var missing = [];
+      if (!obj || typeof obj !== 'object') return { ok: false, error: 'nao e objeto' };
+      if (!obj.noiseKey || !obj.noiseKey.private) missing.push('noiseKey');
+      if (!obj.signedIdentityKey || !obj.signedIdentityKey.private) missing.push('identityKey');
+      if (!obj.signedPreKey) missing.push('signedPreKey');
+      if (obj.registrationId == null) missing.push('registrationId');
+      if (!obj.me || !obj.me.id) missing.push('me.id');
+      if (!obj.account || !obj.account.details || !obj.account.deviceSignature) missing.push('account');
+      return { ok: missing.length === 0, missing: missing, obj: obj };
+    }
+    function validate() {
+      var c = parseCreds();
+      var chip = $('credsChip');
+      if (c.empty) { chip.className = 'chip neutral'; chip.textContent = 'aguardando creds'; }
+      else if (c.error) { chip.className = 'chip bad'; chip.textContent = c.error; }
+      else if (!c.ok) { chip.className = 'chip bad'; chip.textContent = 'faltando: ' + c.missing.join(', '); }
+      else {
+        chip.className = 'chip ok';
+        var who = (c.obj.me && c.obj.me.id) ? (' · ' + c.obj.me.id.split(/[:@]/)[0]) : '';
+        chip.textContent = 'creds completas' + who;
+      }
+      var sessionOk = !!$('session').value;
+      $('btnConnect').disabled = !(c.ok && sessionOk && state.secret);
+    }
+
+    function requireSecret() {
+      if (!state.secret) { $('secret').focus(); flash($('btnSecret'), 'defina o segredo'); return false; }
+      return true;
+    }
+
+    // ── conectar ────────────────────────────────────────────────────────────────
+    $('btnConnect').addEventListener('click', async function () {
+      if (!requireSecret()) return;
+      var c = parseCreds();
+      if (!c.ok) return;
+      var session = $('session').value;
+      if (!session) return;
+
+      var log = $('log');
+      log.className = 'log show';
+      log.innerHTML = '';
+      step('spin', 'Injetando creds na sessao...', '');
+
+      var path, body;
+      if (state.channel === 'evogo') {
+        path = '/evogo/link';
+        body = { instanceId: session, creds: c.obj };
+        var wh = $('webhook').value.trim();
+        if (wh) body.webhookUrl = wh;
+      } else {
+        path = '/evo/link';
+        body = { instanceName: session, creds: c.obj };
+      }
+
+      $('btnConnect').disabled = true; $('btnConnect').textContent = 'Conectando...';
+      var r = await api('POST', path, body);
+      $('btnConnect').textContent = 'Conectar';
+      validate();
+
+      log.innerHTML = '';
+      if (!r.ok) {
+        step('bad', 'Falhou', (r.data.error || r.status) + (r.data.detail ? ' — ' + JSON.stringify(r.data.detail) : ''));
+        return;
+      }
+      var d = r.data;
+      step('ok', 'Creds gravadas', d.jid ? ('device: ' + d.jid) : (d.sessionId ? ('session: ' + d.sessionId) : 'ok'));
+      if (d.connected) {
+        step('ok', 'Conectada ao vivo', 'A sessao WhatsApp esta online (CONNECTED).');
+      } else if (d.note) {
+        step('warn', 'Gravado, sem conexao ao vivo', d.note);
+      } else {
+        step('warn', 'Conexao nao confirmada', 'A sessao pode subir em alguns segundos. Recarregue as sessoes p/ conferir o status.');
+      }
+    });
+
+    function step(kind, title, detail) {
+      var ic = kind === 'ok' ? '&#10003;' : kind === 'bad' ? '&#10007;' : kind === 'warn' ? '&#9888;' : '&#8987;';
+      var col = kind === 'ok' ? 'var(--accent)' : kind === 'bad' ? 'var(--err2)' : kind === 'warn' ? 'var(--warn)' : 'var(--blue)';
+      var el = document.createElement('div');
+      el.className = 'step';
+      el.innerHTML = '<div class="ic" style="color:' + col + '">' + ic + '</div>' +
+                     '<div class="tx">' + escapeHtml(title) + (detail ? '<small>' + escapeHtml(detail) + '</small>' : '') + '</div>';
+      $('log').appendChild(el);
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+      });
+    }
+
+    // init
+    loadHealth();
+    validate();
+  </script>
+</body>
+</html>

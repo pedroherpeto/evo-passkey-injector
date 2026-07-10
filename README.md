@@ -12,6 +12,14 @@ extensão) direto na store de backends que rodam como imagem **black-box** — p
 Cada backend é **opcional** e ligado pelas suas variáveis de ambiente. Rode o sidecar na **mesma rede**
 do(s) Postgres — o banco **nunca** precisa ser exposto; exponha só este HTTP (autenticado por segredo).
 
+## UI web (`GET /`) — uso manual sem o zpro
+
+Além do contrato de máquina (usado pelo zpro), o sidecar serve uma **página web** em `/` para uso manual
+por outros sistemas: cole o JSON de creds da extensão (**"Copiar creds"**), escolha a sessão já criada no
+Evolution/Evolution Go e clique **Conectar**. A UI fala **só com este sidecar** (mesma origem = zero CORS);
+o segredo e as apikeys ficam no servidor. Funciona para **Evolution API e Evolution Go ao mesmo tempo**
+(o seletor de canal aparece conforme os backends ligados). Abra `http://<host-do-injector>:<porta>/`.
+
 ## Por que existe
 
 Evolution API e Evolution Go rodam como imagens black-box e **não têm endpoint HTTP** para importar uma
@@ -43,28 +51,58 @@ funcionando por QR normalmente; o sidecar só habilita o import-por-passkey.
 | `EVO_DATABASE_URI` | DSN do Postgres do Evolution API. Liga o endpoint `/import-creds`. Opcional. |
 | `EVOGO_AUTH_DATABASE_URI` | DSN do banco `evogo_auth` (store whatsmeow). |
 | `EVOGO_USERS_DATABASE_URI` | DSN do banco `evogo_users` (instâncias). Os dois juntos ligam `/evogo/import-creds`. Opcional. |
+| `EVO_API_URL` | Base HTTP da API do Evolution (ex.: `http://evolution_api:8080`). Liga o **connect ao vivo** do Evolution API. Opcional. |
+| `EVO_API_KEY` | `AUTHENTICATION_API_KEY` (global) do Evolution API. Usado no connect. Opcional. |
+| `EVOGO_API_URL` | Base HTTP da API do Evolution Go (ex.: `http://evogo:8082`). Liga o **connect ao vivo** do Evolution Go (usa o token por-instância do banco). Opcional. |
+| `EVOGO_API_KEY` | `GLOBAL_API_KEY` do Evolution Go. Só necessário para **criar sessão** pela UI. Opcional. |
 
 Pelo menos um backend (Evolution API **ou** Evolution Go) precisa estar configurado, senão o processo aborta.
+As quatro últimas são **opcionais**: sem elas o import ainda grava as creds e a sessão sobe no próximo
+connect/restart do backend; com elas o botão **Conectar** sobe a sessão na hora.
+
+> **Redes docker:** o injector precisa alcançar o(s) **Postgres** *e* a(s) **API(s)**. Se Evolution e
+> Evolution Go rodam em redes diferentes, **conecte o injector às duas** (`docker network connect`).
 
 ## API
 
+Todos os endpoints de dados exigem o header `x-injector-secret: <INJECTOR_SECRET>`.
+
 ```
-POST /import-creds                 (Evolution API)
-  Header:  x-injector-secret: <INJECTOR_SECRET>
-  Body:    { "instanceName": "<nome da instância>", "credsEncoded": "<string BufferJSON>" }
+GET  /                             UI web (public/index.html) — sem segredo
+
+POST /import-creds                 (Evolution API) — import
+  Body:    { "instanceName": "<nome>", "credsEncoded": "<string BufferJSON>" }
+       ou: { "instanceName": "<nome>", "creds": { ...dump cru da extensao } }
   200:     { "success": true, "sessionId": "<cuid>" }
   400:     INSTANCE_NAME_REQUIRED | CREDS_REQUIRED | CREDS_INVALID
   401:     UNAUTHORIZED       404: INSTANCE_NOT_FOUND       503: EVOLUTION_API_NOT_CONFIGURED
 
-POST /evogo/import-creds           (Evolution Go)
-  Header:  x-injector-secret: <INJECTOR_SECRET>
-  Body:    { "instanceId": "<uuid da instância>", "creds": { ...formato Baileys/base64 } }
+POST /evogo/import-creds           (Evolution Go) — import
+  Body:    { "instanceId": "<uuid>", "creds": { ...dump cru da extensao } }
   200:     { "success": true, "jid": "5511...:23@s.whatsapp.net" }
   400:     INSTANCE_ID_REQUIRED | CREDS_INVALID | CREDS_MISSING_ACCOUNT
   401:     UNAUTHORIZED       404: INSTANCE_NOT_FOUND       503: EVOLUTION_GO_NOT_CONFIGURED
 
-GET /health -> { "ok": true, "evolutionApi": <bool>, "evolutionGo": <bool> }
+GET  /evo/instances                lista { instances:[{id,name}] }               (Evolution API)
+GET  /evogo/instances              lista { instances:[{id,name,jid,connected}] }  (Evolution Go)
+
+POST /evogo/create                 cria sessao { name } -> { id, token }  (exige EVOGO_API_URL+KEY)
+
+POST /evo/link                     import + connect ao vivo (Evolution API)
+  Body:    { "instanceName": "<nome>", "creds": { ... } }   (ou credsEncoded)
+  200:     { success, imported, connected, ... }
+
+POST /evogo/link                   import + connect ao vivo (Evolution Go)
+  Body:    { "instanceId": "<uuid>", "creds": { ... }, "webhookUrl": "<opcional>" }
+  200:     { success, imported, connected, jid, status, ... }
+
+GET  /health -> { ok, evolutionApi, evolutionGo, connect:{ evolutionApi, evolutionGo, evolutionGoCreate } }
 ```
+
+> **Dump cru vs `credsEncoded`**: a UI e outros sistemas mandam o **dump cru** da extensão (`creds`) — o
+> sidecar faz a conversão Baileys + encode (`initAuthCreds` + `BufferJSON`, self-contained). O zpro manda
+> `credsEncoded` já 1x-encodado (compat retro). O dump pode vir puro **ou** como o export completo da
+> extensão `{ creds:{...}, warnings, ... }` (o sidecar desce um nível sozinho).
 
 > **Evolution API**: `credsEncoded` = `JSON.stringify(creds, BufferJSON.replacer)` (já 1x-encodado pelo
 > zpro). O sidecar **embrulha uma segunda vez** porque a coluna `Session.creds` é **duplo-encodada**

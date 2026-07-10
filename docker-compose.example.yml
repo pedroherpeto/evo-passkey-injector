@@ -24,14 +24,24 @@ services:
       # ── Evolution Go (whatsmeow) — descomente se usar ──
       # EVOGO_AUTH_DATABASE_URI: postgres://postgres:senha@evogo-pg:5432/evogo_auth
       # EVOGO_USERS_DATABASE_URI: postgres://postgres:senha@evogo-pg:5432/evogo_users
+      # ── Conectar ao vivo + UI (GET /) — descomente p/ o botao "Conectar" subir na hora ──
+      # EVO_API_URL: http://evolution_api:8080
+      # EVO_API_KEY: ${EVO_API_KEY}          # AUTHENTICATION_API_KEY do Evolution API
+      # EVOGO_API_URL: http://evogo:8082
+      # EVOGO_API_KEY: ${EVOGO_API_KEY}      # GLOBAL_API_KEY do Evolution Go (so p/ "Criar sessao")
     networks:
+      # O injector precisa alcancar o(s) Postgres E a(s) API(s). Se Evolution e
+      # Evolution Go estao em REDES diferentes, conecte o injector a AMBAS.
       - evolution-net
+      # - evogo-net
     ports:
-      # zpro no MESMO host: mantenha 127.0.0.1 (so local).
-      # zpro em host SEPARADO: exponha atras de HTTPS/reverse-proxy (o segredo protege o endpoint).
-      - "127.0.0.1:8082:8080"
+      # UI web + endpoints. zpro/uso local no MESMO host: mantenha 127.0.0.1.
+      # Host SEPARADO: exponha atras de HTTPS/reverse-proxy (o segredo protege tudo).
+      - "127.0.0.1:8085:8080"
 
-# A rede e definida pelo compose do Evolution/Evolution Go. Se necessario:
+# As redes sao definidas pelos composes do Evolution/Evolution Go. Referencie como externas:
 # networks:
 #   evolution-net:
+#     external: true
+#   evogo-net:
 #     external: true
