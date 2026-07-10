@@ -20,6 +20,11 @@ Evolution/Evolution Go e clique **Conectar**. A UI fala **só com este sidecar**
 o segredo e as apikeys ficam no servidor. Funciona para **Evolution API e Evolution Go ao mesmo tempo**
 (o seletor de canal aparece conforme os backends ligados). Abra `http://<host-do-injector>:<porta>/`.
 
+Extensão (extrai a sessão sem QR): **[Passkey Linker — Chrome Web Store](https://chromewebstore.google.com/detail/passkey-linker/hehoacnepmncbjckgnfekfcgdijpigaj)**.
+Na extensão, clique **"Copiar creds"** e cole o JSON na UI. As sessões são carregadas automaticamente ao
+escolher o canal; se `EVO_API_URL`/`EVOGO_API_URL` (+ apikey) estiverem ligados, dá para **criar uma sessão
+nova** direto pela UI nos dois canais.
+
 ## Por que existe
 
 Evolution API e Evolution Go rodam como imagens black-box e **não têm endpoint HTTP** para importar uma
@@ -39,8 +44,82 @@ funcionando por QR normalmente; o sidecar só habilita o import-por-passkey.
    **URL do injector** e **Segredo do injector** (o mesmo `INJECTOR_SECRET`). Se você usa os dois
    canais com o mesmo sidecar, aponte as duas telas para a **mesma URL/segredo**.
 
-- **zpro no mesmo host**: mantenha o port em `127.0.0.1` (só local); URL do injector tipo `http://127.0.0.1:8082`.
+- **zpro no mesmo host**: mantenha o port em `127.0.0.1` (só local); URL do injector tipo `http://127.0.0.1:8085`.
 - **zpro em host separado**: exponha atrás de **HTTPS/reverse-proxy**; o `INJECTOR_SECRET` protege o endpoint.
+
+## Passo a passo com `docker run` (Evolution API + Evolution Go na mesma máquina)
+
+Cenário: `evolution_api` e `evogo` já rodando em **redes diferentes** (`evolution_evolution-net` e
+`evogo-net`), cada um com seu Postgres interno. Subimos **um** injector na porta `127.0.0.1:8085`,
+ligado às **duas** redes, servindo a UI e o connect ao vivo dos dois canais.
+
+**1) Descubra os valores** (DSNs, apikeys, nomes internos) inspecionando os containers:
+
+```bash
+# apikey global + DSN do Evolution API
+docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' evolution_api | grep -E 'AUTHENTICATION_API_KEY|DATABASE_CONNECTION_URI|SERVER_PORT'
+# GLOBAL_API_KEY + DSNs do Evolution Go
+docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' evogo | grep -E 'GLOBAL_API_KEY|POSTGRES_AUTH_DB|POSTGRES_USERS_DB|SERVER_PORT'
+# nome de rede de cada stack
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' evolution_api
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' evogo
+```
+
+Os `EVO_API_URL`/`EVOGO_API_URL` usam o **nome interno** do serviço + a **porta interna** (`SERVER_PORT`),
+não a porta publicada no host. As DSNs usam o hostname interno do Postgres (ex.: `postgres`, `evogo-pg`).
+
+**2) Construa a imagem** (ou use a publicada `zdgzpro/evo-passkey-injector:latest`):
+
+```bash
+cd extra/evo-passkey-injector
+docker build -t evo-passkey-injector:local .
+```
+
+**3) Suba o container** na primeira rede, com todo o env (troque os valores pelos seus):
+
+```bash
+docker rm -f evo-passkey-injector 2>/dev/null
+
+docker run -d --name evo-passkey-injector --restart always \
+  -p 127.0.0.1:8085:8080 \
+  --network evolution_evolution-net \
+  -e PORT=8080 \
+  -e INJECTOR_SECRET=<seu-segredo> \
+  -e EVO_DATABASE_URI=postgres://postgres:typebot@postgres:5432/evolution_db \
+  -e EVOGO_AUTH_DATABASE_URI=postgres://postgres:root@evogo-pg:5432/evogo_auth \
+  -e EVOGO_USERS_DATABASE_URI=postgres://postgres:root@evogo-pg:5432/evogo_users \
+  -e EVO_API_URL=http://evolution_api:8080 \
+  -e EVO_API_KEY=<AUTHENTICATION_API_KEY> \
+  -e EVOGO_API_URL=http://evogo:8082 \
+  -e EVOGO_API_KEY=<GLOBAL_API_KEY> \
+  evo-passkey-injector:local
+```
+
+**4) Conecte a segunda rede** (senão o injector não alcança o Postgres/API do Evolution Go):
+
+```bash
+docker network connect evogo-net evo-passkey-injector
+```
+
+> Se os dois backends estivessem na **mesma** rede, bastaria o `--network` do passo 3 e o passo 4 seria
+> dispensado. O `docker run` só aceita uma rede na criação — as demais entram com `docker network connect`.
+
+**5) Verifique** (o `/health` toca os dois Postgres; as listagens exigem o segredo):
+
+```bash
+curl -s http://127.0.0.1:8085/health
+curl -s http://127.0.0.1:8085/evo/instances   -H "x-injector-secret: <seu-segredo>"
+curl -s http://127.0.0.1:8085/evogo/instances -H "x-injector-secret: <seu-segredo>"
+```
+
+Esperado no `/health`: `{"ok":true,"evolutionApi":true,"evolutionGo":true,"connect":{"evolutionApi":true,"evolutionGo":true,"evolutionGoCreate":true}}`.
+
+**6) Abra a UI**: `http://127.0.0.1:8085/` → digite o segredo, escolha o canal, carregue as sessões,
+cole as creds da extensão (**"Copiar creds"**) e clique **Conectar**.
+
+> **Atualizar depois de mexer no código**: `docker build -t evo-passkey-injector:local .` de novo e repita
+> os passos 3–4 (o container é descartável; toda a config vive nos `-e`). Guarde os `-e` num script `.sh`
+> local (fora do git) para não redigitar.
 
 ## Variáveis de ambiente
 
@@ -86,6 +165,7 @@ POST /evogo/import-creds           (Evolution Go) — import
 GET  /evo/instances                lista { instances:[{id,name}] }               (Evolution API)
 GET  /evogo/instances              lista { instances:[{id,name,jid,connected}] }  (Evolution Go)
 
+POST /evo/create                   cria sessao { name } -> { id, name }   (exige EVO_API_URL+KEY)
 POST /evogo/create                 cria sessao { name } -> { id, token }  (exige EVOGO_API_URL+KEY)
 
 POST /evo/link                     import + connect ao vivo (Evolution API)

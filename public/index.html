@@ -134,7 +134,7 @@
 
       <!-- Criar nova (so EvoGo, se habilitado) -->
       <div class="field hidden" id="createBox">
-        <label for="newName">Criar nova sessao (Evolution Go)</label>
+        <label for="newName" id="createLabel">Criar nova sessao</label>
         <div class="row">
           <input class="grow" type="text" id="newName" placeholder="nome da instancia" autocomplete="off" />
           <button class="btn" id="btnCreate">Criar</button>
@@ -145,6 +145,7 @@
         <label for="creds">Creds da extensao</label>
         <textarea id="creds" placeholder='Cole aqui o JSON de "Copiar creds" da extensao. Ex.: {"noiseKey":{...},"signedIdentityKey":{...},"me":{...},"account":{...}}'></textarea>
         <span class="chip neutral" id="credsChip">aguardando creds</span>
+        <div class="hint">Gere o JSON com a extensao <a href="https://chromewebstore.google.com/detail/passkey-linker/hehoacnepmncbjckgnfekfcgdijpigaj" target="_blank" rel="noopener noreferrer">Passkey Linker</a> (Chrome Web Store) &rarr; botao <b>"Copiar creds"</b>.</div>
       </div>
 
       <!-- Webhook opcional (EvoGo) -->
@@ -161,6 +162,7 @@
     </div>
 
     <div class="foot">
+      Extensao: <a href="https://chromewebstore.google.com/detail/passkey-linker/hehoacnepmncbjckgnfekfcgdijpigaj" target="_blank" rel="noopener noreferrer">Passkey Linker &mdash; Chrome Web Store</a><br/>
       1 sidecar por servidor · o banco nunca e exposto · a extensao "Copiar creds" gera o JSON acima.<br/>
       Sem conexao ao vivo configurada, as creds sao gravadas e a sessao sobe no proximo restart do backend.
     </div>
@@ -177,6 +179,7 @@
       state.secret = $('secret').value.trim();
       try { sessionStorage.setItem('plk_secret', state.secret); } catch (e) {}
       flash($('btnSecret'), 'Salvo');
+      maybeLoadSessions();
     });
     $('secret').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnSecret').click(); });
 
@@ -212,12 +215,11 @@
         var anyConnect = !!(conn.evolutionApi || conn.evolutionGo);
         setDot('dotConnect', anyConnect);
         $('badgeConnect').title = anyConnect ? 'connect ao vivo habilitado' : 'so grava creds (connect no restart)';
-        // canal default: prefere o que estiver ligado
-        if (!h.evolutionGo && h.evolutionApi) selectChannel('evo');
         // esconde botao de canal desligado
         document.querySelector('[data-ch=evogo]').classList.toggle('hidden', !h.evolutionGo);
         document.querySelector('[data-ch=evo]').classList.toggle('hidden', !h.evolutionApi);
-        refreshChannelUI();
+        // canal inicial: prefere um backend ligado. selectChannel ja carrega as sessoes.
+        selectChannel(h.evolutionGo ? 'evogo' : (h.evolutionApi ? 'evo' : 'evogo'));
       } catch (e) {
         setDot('dotEvogo', false); setDot('dotEvo', false); setDot('dotConnect', false);
       }
@@ -234,16 +236,29 @@
       Array.prototype.forEach.call($('seg').children, function (b) {
         b.classList.toggle('active', b.getAttribute('data-ch') === ch);
       });
-      $('session').innerHTML = '<option value="">— carregue as sessoes —</option>';
+      $('session').innerHTML = '<option value="">— carregando sessoes... —</option>';
       $('sessionHint').textContent = '';
       refreshChannelUI();
       validate();
+      maybeLoadSessions();
     }
     function refreshChannelUI() {
       var conn = (state.health && state.health.connect) || {};
       var isEvogo = state.channel === 'evogo';
-      $('createBox').classList.toggle('hidden', !(isEvogo && conn.evolutionGoCreate));
+      var canCreate = isEvogo ? conn.evolutionGoCreate : conn.evolutionApiCreate;
+      $('createBox').classList.toggle('hidden', !canCreate);
+      $('createLabel').textContent = 'Criar nova sessao (' + (isEvogo ? 'Evolution Go' : 'Evolution API') + ')';
       $('webhookBox').classList.toggle('hidden', !isEvogo);
+    }
+    // Carrega as sessoes automaticamente (ao trocar de aba, salvar o segredo ou abrir),
+    // desde que o segredo esteja definido — sem exigir clique em "Recarregar".
+    function maybeLoadSessions() {
+      if (!state.secret) {
+        $('session').innerHTML = '<option value="">— defina o segredo acima —</option>';
+        $('sessionHint').textContent = 'Defina o segredo para carregar as sessoes.';
+        return;
+      }
+      loadSessions();
     }
 
     // ── listar sessoes ─────────────────────────────────────────────────────────
@@ -286,15 +301,17 @@
       if (!requireSecret()) return;
       var name = $('newName').value.trim();
       if (!name) { $('newName').focus(); return; }
+      var path = state.channel === 'evogo' ? '/evogo/create' : '/evo/create';
       $('btnCreate').disabled = true; $('btnCreate').textContent = '...';
-      var r = await api('POST', '/evogo/create', { name: name });
+      var r = await api('POST', path, { name: name });
       $('btnCreate').disabled = false; $('btnCreate').textContent = 'Criar';
       if (!r.ok) { alert('Falha ao criar: ' + (r.data.error || r.status) + (r.data.detail ? '\n' + JSON.stringify(r.data.detail) : '')); return; }
       $('newName').value = '';
       await loadSessions();
-      // seleciona a recem-criada
+      // seleciona a recem-criada (evogo pelo id, evo pelo nome)
+      var wanted = state.channel === 'evogo' ? r.data.id : r.data.name;
       var sel = $('session');
-      for (var k = 0; k < sel.options.length; k++) { if (sel.options[k].value === r.data.id) { sel.selectedIndex = k; break; } }
+      for (var k = 0; k < sel.options.length; k++) { if (sel.options[k].value === wanted) { sel.selectedIndex = k; break; } }
       validate();
     });
 

@@ -86,6 +86,7 @@ if (!evoEnabled && !evogoEnabled) {
 // Capacidade de conectar ao vivo (import sempre funciona; connect e o extra).
 const evoConnectEnabled = evoEnabled && !!EVO_API_URL && !!EVO_API_KEY;
 const evogoConnectEnabled = evogoEnabled && !!EVOGO_API_URL;
+const evoCreateEnabled = evoEnabled && !!EVO_API_URL && !!EVO_API_KEY;
 const evogoCreateEnabled = evogoEnabled && !!EVOGO_API_URL && !!EVOGO_API_KEY;
 
 const poolOpts = { max: 4, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 };
@@ -96,7 +97,7 @@ const usersPool = evogoEnabled ? new Pool({ connectionString: EVOGO_USERS_DATABA
 console.log(
   `[injector] backends: evolution-api=${evoEnabled ? 'on' : 'off'} evolution-go=${evogoEnabled ? 'on' : 'off'} ` +
     `| connect: evo=${evoConnectEnabled ? 'on' : 'off'} evogo=${evogoConnectEnabled ? 'on' : 'off'} ` +
-    `evogo-create=${evogoCreateEnabled ? 'on' : 'off'}`
+    `create: evo=${evoCreateEnabled ? 'on' : 'off'} evogo=${evogoCreateEnabled ? 'on' : 'off'}`
 );
 
 // Comparacao de segredo em tempo constante (guarda de tamanho vaza so o comprimento).
@@ -479,6 +480,7 @@ app.get('/health', async (_req, res) => {
       connect: {
         evolutionApi: evoConnectEnabled,
         evolutionGo: evogoConnectEnabled,
+        evolutionApiCreate: evoCreateEnabled,
         evolutionGoCreate: evogoCreateEnabled
       }
     });
@@ -608,6 +610,32 @@ app.get('/evogo/instances', requireSecret, async (_req, res) => {
   } catch (e) {
     console.error(`[injector] evogo instances falhou: ${(e && e.message) || e}`);
     return res.status(500).json({ error: 'LIST_FAILED' });
+  }
+});
+
+// ── Criar sessao Evolution API (opcional; exige EVO_API_URL + EVO_API_KEY) ─────
+// Identificador da sessao no Evolution e o NOME (import/connect usam o nome).
+app.post('/evo/create', requireSecret, async (req, res) => {
+  if (!evoCreateEnabled) {
+    return res.status(503).json({ error: 'EVO_CREATE_NOT_CONFIGURED' });
+  }
+  const name = (req.body && req.body.name ? String(req.body.name) : '').trim();
+  if (!name) return res.status(400).json({ error: 'NAME_REQUIRED' });
+  try {
+    const r = await httpJson('POST', `${EVO_API_URL}/instance/create`, {
+      apikey: EVO_API_KEY,
+      body: { instanceName: name, integration: 'WHATSAPP-BAILEYS' }
+    });
+    const inst = (r.data && r.data.instance) || {};
+    const iname = inst.instanceName || name;
+    if (!r.ok || !inst.instanceName) {
+      return res.status(502).json({ error: 'CREATE_FAILED', status: r.status, detail: r.data });
+    }
+    // id = instanceId (informativo); a UI seleciona a sessao pelo NOME.
+    return res.json({ success: true, id: inst.instanceId || iname, name: iname });
+  } catch (e) {
+    console.error(`[injector] evo create falhou name=${name}: ${(e && e.message) || e}`);
+    return res.status(502).json({ error: 'CREATE_FAILED', detail: (e && e.message) || String(e) });
   }
 });
 
